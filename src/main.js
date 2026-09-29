@@ -22,6 +22,13 @@ const el = {
   status: $("status"),
   start: $("start"),
   online: $("online"),
+  solo: $("solo"),
+  soloModal: $("soloModal"),
+  soloClose: $("soloClose"),
+  soloStart: $("soloStart"),
+  soloColor: $("soloColor"),
+  soloCount: $("soloCount"),
+  soloLevel: $("soloLevel"),
   roomBadge: $("roomBadge"),
   roll: $("roll"),
   view: $("view"),
@@ -114,6 +121,8 @@ const online = {
   inbox: [], // client: game messages waiting for the local animation to finish
   latest: null, // client: newest state snapshot from the host
   botTimer: null,
+  solo: false, // playing against computers on this device only (no network)
+  botLevel: "normal",
 };
 
 const scene = createScene(el.stage, game, {
@@ -785,6 +794,7 @@ function drainIntents() {
 /** Computer players: pick a sensible legal move (captures > finishing > leaving base > progress). */
 function botChoose(player, roll) {
   let best = null;
+  const all = [];
   game.movableTokens(player, roll).forEach((token) => {
     const o = game.options(token, roll);
     const dirs = [];
@@ -804,9 +814,12 @@ function botChoose(player, roll) {
         else if (target > player.entryStep) score += 35;
         if (token.steps > 0) score += token.steps * 0.15;
       }
+      all.push({ token, dir, score });
       if (!best || score > best.score) best = { token, dir, score };
     });
   });
+  // Easy computers often just pick any legal move.
+  if (online.botLevel === "easy" && all.length && Math.random() < 0.55) return all[Math.floor(Math.random() * all.length)];
   return best;
 }
 
@@ -948,9 +961,17 @@ function renderLobby() {
 }
 
 function updateBadge() {
+  el.online.hidden = online.solo;
+  el.solo.hidden = online.active;
   if (!online.active) {
     el.roomBadge.hidden = true;
     el.online.textContent = "Play Online";
+    return;
+  }
+  if (online.solo) {
+    el.roomBadge.hidden = false;
+    el.roomBadge.className = `room-badge ${online.mySeat}`;
+    el.roomBadge.textContent = `You: ${online.mySeat[0].toUpperCase()}${online.mySeat.slice(1)} · vs Computer`;
     return;
   }
   el.online.textContent = "Room";
@@ -1182,6 +1203,42 @@ function handleStart(enabled, starter) {
   runStarter(starter);
 }
 
+/** Play vs Computer: the online host machinery, run locally with a dummy network. */
+function startSolo(color, opponents, level) {
+  const idx = SEATS.indexOf(color);
+  // 1 opponent sits opposite; 2 sit either side; 3 fill the table
+  const prefs = [(idx + 2) % 4, (idx + 1) % 4, (idx + 3) % 4].map((i) => SEATS[i]);
+  const chosen = prefs.slice(0, opponents);
+
+  online.active = true;
+  online.role = "host";
+  online.solo = true;
+  online.botLevel = level;
+  online.link = { broadcast() {}, sendTo() {}, close() {} };
+  online.code = null;
+  online.ended = false;
+  online.intents = [];
+  online.inbox = [];
+  online.latest = null;
+  online.mySeat = color;
+  online.seats = Object.fromEntries(SEATS.map((c) => [c, { kind: "closed", name: "" }]));
+  online.seats[color] = { kind: "host", name: "" };
+  chosen.forEach((c) => {
+    online.seats[c] = { kind: "bot", name: "" };
+  });
+  clearPersisted(); // the previous local game is being replaced
+  el.start.classList.add("hidden");
+  el.reset.disabled = false;
+  el.reset.textContent = "Leave Game";
+  setModal(el.soloModal, false);
+  setModal(el.playersModal, false);
+  updateBadge();
+
+  const enabled = SEATS.filter((c) => online.seats[c].kind !== "closed");
+  const starter = game.players.find((p) => p.color === enabled[Math.floor(Math.random() * enabled.length)]).idx;
+  handleStart(enabled, starter);
+}
+
 function leaveRoom() {
   try {
     online.link?.close();
@@ -1225,7 +1282,7 @@ el.playersSave.addEventListener("click", () => {
   setModal(el.playersModal, false);
   persist();
 });
-[el.rulesModal, el.playersModal, el.onlineModal].forEach((modal) => {
+[el.rulesModal, el.playersModal, el.onlineModal, el.soloModal].forEach((modal) => {
   modal.addEventListener("click", (event) => {
     if (event.target === modal) setModal(modal, false);
   });
@@ -1248,6 +1305,21 @@ el.winnerNew.addEventListener("click", () => {
 });
 
 el.online.addEventListener("click", openOnlineModal);
+
+// Play vs Computer setup dialog (single-choice chip groups)
+const chipValue = (group) => group.querySelector('.chip[aria-pressed="true"]').dataset.value;
+[el.soloColor, el.soloCount, el.soloLevel].forEach((group) => {
+  group.addEventListener("click", (event) => {
+    const chip = event.target.closest(".chip");
+    if (!chip) return;
+    group.querySelectorAll(".chip").forEach((c) => c.setAttribute("aria-pressed", String(c === chip)));
+  });
+});
+el.solo.addEventListener("click", () => setModal(el.soloModal, true));
+el.soloClose.addEventListener("click", () => setModal(el.soloModal, false));
+el.soloStart.addEventListener("click", () =>
+  startSolo(chipValue(el.soloColor), Number(chipValue(el.soloCount)), chipValue(el.soloLevel))
+);
 el.onlineClose.addEventListener("click", () => setModal(el.onlineModal, false));
 el.onlineCreate.addEventListener("click", createRoom);
 el.onlineJoin.addEventListener("click", () => joinRoom(el.onlineCode.value));
@@ -1283,6 +1355,7 @@ document.addEventListener("keydown", (event) => {
     setModal(el.rulesModal, false);
     setModal(el.playersModal, false);
     setModal(el.onlineModal, false);
+    setModal(el.soloModal, false);
   } else if (event.code === "Space" && event.target === document.body) {
     event.preventDefault();
     requestRoll();

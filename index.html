@@ -28,6 +28,7 @@
       </div>
       <div class="controls">
         <button id="start">Choose Players</button>
+        <button class="ghost" id="solo">Play vs Computer</button>
         <button class="ghost" id="online">Play Online</button>
         <button class="roll-btn" id="roll" disabled>Roll Dice</button>
         <button class="ghost" id="view" title="Reset camera">Reset View</button>
@@ -68,6 +69,37 @@
         <div class="direction-actions">
           <button id="directionForward">Move Forward</button>
           <button class="ghost" id="directionBackward">Move Backward</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Play vs Computer setup -->
+    <section class="modal" id="soloModal" aria-hidden="true">
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="soloTitle">
+        <header class="modal-header">
+          <h2 id="soloTitle">Play vs Computer</h2>
+          <button class="ghost" id="soloClose" aria-label="Close">Close</button>
+        </header>
+        <div class="modal-body">
+          <p class="label-inline">Your color</p>
+          <div class="chip-group" id="soloColor" role="group" aria-label="Your color">
+            <button class="chip blue" data-value="blue" aria-pressed="true">Blue</button>
+            <button class="chip red" data-value="red" aria-pressed="false">Red</button>
+            <button class="chip yellow" data-value="yellow" aria-pressed="false">Yellow</button>
+            <button class="chip green" data-value="green" aria-pressed="false">Green</button>
+          </div>
+          <p class="label-inline">Computer opponents</p>
+          <div class="chip-group" id="soloCount" role="group" aria-label="Number of opponents">
+            <button class="chip" data-value="1" aria-pressed="true">1</button>
+            <button class="chip" data-value="2" aria-pressed="false">2</button>
+            <button class="chip" data-value="3" aria-pressed="false">3</button>
+          </div>
+          <p class="label-inline">Difficulty</p>
+          <div class="chip-group" id="soloLevel" role="group" aria-label="Difficulty">
+            <button class="chip" data-value="easy" aria-pressed="false">Easy</button>
+            <button class="chip" data-value="normal" aria-pressed="true">Normal</button>
+          </div>
+          <div class="players-actions"><button id="soloStart">Start Game</button></div>
         </div>
       </div>
     </section>
@@ -181,6 +213,9 @@
             <li>Drag to orbit; scroll or pinch to zoom. On touch: one finger orbits, two fingers pinch/twist, double-tap empty space to reset the view.</li>
             <li>Click the dice, the Roll button or press Space to roll.</li>
             <li>Click or tap a glowing pawn to move it (taps snap to the nearest movable pawn).</li>
+          </ul></section>
+          <section><h3>Play vs Computer</h3><ul>
+            <li>Tap <b>Play vs Computer</b>, pick your color, 1–3 opponents and a difficulty.</li>
           </ul></section>
           <section><h3>Online play</h3><ul>
             <li>Tap <b>Play Online</b>, then <b>Create Room</b> and share the 5-letter code or the invite link.</li>

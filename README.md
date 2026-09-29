@@ -27,6 +27,13 @@ python3 -m http.server 8765
 Drag to orbit, scroll/pinch to zoom, **Reset View** (or double-tap empty space on touch) to recentre. On phones: one finger orbits, two fingers pinch/twist, taps snap to the nearest movable pawn, the round Roll button sits under your thumb, and rolls/captures give haptic feedback. Click the dice, the Roll button or press Space to roll;
 click a glowing pawn to move it. Game state is saved to `localStorage` after each move.
 
+## Play vs Computer
+
+**Play vs Computer** starts a solo game on your device: choose your color, 1–3 computer opponents and Easy or Normal
+difficulty. Computers prefer captures, finishing pawns, leaving base and safe squares; Easy ones often pick any legal
+move. It reuses the online host logic locally (no network), so the rules and camera behave exactly as in online rooms.
+Solo games are not saved across reloads.
+
 ## Online multiplayer
 
 Tap **Play Online** → **Create Room** and share the 5-letter code (or the invite link). Friends open the link, enter a

@@ -399,3 +399,20 @@ body::after {
 .hint { color: var(--muted); font-size: 0.85rem; min-height: 1.2em; margin: 6px 0 12px; }
 .online-error { color: #ff8b8b; min-height: 1.2em; margin: 10px 0 0; font-weight: 700; }
 button.busy { opacity: 0.6; pointer-events: none; }
+
+/* ---------- play vs computer ---------- */
+.label-inline { margin: 14px 0 6px; font-size: 0.75rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.chip-group { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  flex: 1;
+  min-width: 64px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.07);
+  border: 2px solid var(--panel-line);
+  box-shadow: none;
+}
+.chip[aria-pressed="true"] { background: rgba(242, 194, 48, 0.2); border-color: var(--gold); }
+.chip.blue { border-left: 6px solid var(--blue); }
+.chip.red { border-left: 6px solid var(--red); }
+.chip.yellow { border-left: 6px solid var(--yellow); }
+.chip.green { border-left: 6px solid var(--green); }
