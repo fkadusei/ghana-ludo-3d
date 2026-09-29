@@ -56,12 +56,30 @@ name and take an open seat; the host can set any seat to **Computer** or **Close
 
 ### Relay (TURN) for strict networks
 
-Free public TURN relays no longer exist (I checked: the old open relay returns no relay candidates), so a relay needs
-credentials only you can create. The plumbing is ready in `src/config.js`:
+Free public TURN relays no longer exist, so a relay needs credentials only you can create. This repo is wired for
+**Cloudflare Realtime TURN**: `functions/api/turn.js` is a Cloudflare Pages Function (`GET /api/turn`) that mints
+short-lived credentials, and `src/config.js` points `TURN_CREDENTIALS_URL` at it. The API token lives only in
+Cloudflare, never in the repo or the browser. Until it's configured (or on hosts without the function, such as
+GitHub Pages) the endpoint returns an empty list and the game simply uses direct connections.
 
-1. Get a relay: a free tier from a TURN provider (for example Metered or Cloudflare Realtime TURN), or run your own
-   [coturn](https://github.com/coturn/coturn).
-2. Either paste fixed servers into `TURN_SERVERS`, or set `TURN_CREDENTIALS_URL` to an endpoint that returns a JSON
-   array of `RTCIceServer` objects. The URL form fetches fresh credentials each time a room is created/joined, which is
-   better than committing a secret to a public repo (anyone could burn your quota).
-3. Commit and push; Pages redeploys. Peers that can't connect directly will then fall back to the relay automatically.
+## Deploy to Cloudflare Pages (recommended)
+
+1. **Create the TURN key:** Cloudflare dashboard → *Realtime* → *TURN Server* → create a key. Note the **Key ID** and
+   **API token**.
+2. **Create the Pages project:** *Workers & Pages* → *Create* → *Pages* → *Connect to Git* → pick this repo.
+   Framework preset **None**, build command **empty**, build output directory **`/`**. Deploy.
+3. **Add the secrets:** the Pages project → *Settings* → *Variables and Secrets* (Production): add `TURN_KEY_ID` and
+   `TURN_KEY_API_TOKEN` (encrypt the token as a *Secret*), then redeploy so the function sees them.
+4. **Custom domain:** the Pages project → *Custom domains* → *Set up a domain*. If the domain's DNS is on Cloudflare
+   the DNS record and HTTPS certificate are created for you.
+5. **Verify the relay:** open `https://YOUR-SITE/api/turn`. Directly in the address bar it should return JSON with
+   `turn:` URLs (the response header `X-Relay` reads `ok`). If it returns `[]`, check `X-Relay`: `not-configured`
+   means a variable is missing, `upstream-401/403` means a wrong Key ID or token.
+
+Every push to `main` then redeploys automatically. HTTPS is required for sound, the copy-invite button and WebRTC.
+The function only answers requests from the site itself (it rejects cross-site fetches) and credentials expire after
+4 hours.
+
+Local testing: `npx wrangler pages dev .` serves the site and function together (put test values in a git-ignored
+`.dev.vars` file). Plain `python3 -m http.server` also works but has no `/api/turn`, which is fine: the game just
+skips the relay.

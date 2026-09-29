@@ -17,5 +17,9 @@ export const TURN_SERVERS = [
  * Or a URL that returns a JSON array of RTCIceServer objects (fetched fresh each time a room is created
  * or joined). Use this with providers that mint short-lived credentials, so no secret lives in the repo.
  * Example shape: [{ "urls": "turn:...", "username": "...", "credential": "..." }]
+ *
+ * "/api/turn" is the Cloudflare Pages Function in functions/api/turn.js, which mints Cloudflare Realtime
+ * TURN credentials. On hosts without that function (e.g. plain GitHub Pages) the request 404s and the
+ * game just uses direct connections, so it is safe to leave set.
  */
-export const TURN_CREDENTIALS_URL = "";
+export const TURN_CREDENTIALS_URL = "/api/turn";

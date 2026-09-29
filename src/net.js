@@ -30,6 +30,7 @@ async function peerConfig() {
       const timer = setTimeout(() => controller.abort(), 4000);
       const res = await fetch(TURN_CREDENTIALS_URL, { signal: controller.signal });
       clearTimeout(timer);
+      if (!res.ok) throw new Error(`relay endpoint ${res.status}`);
       const extra = await res.json();
       if (Array.isArray(extra)) iceServers.push(...extra);
     } catch (err) {
@@ -143,9 +144,7 @@ export async function joinRoom(code, handlers) {
       () =>
         reject(
           new Error(
-            hasRelay()
-              ? "Could not connect. Check the room code and try again."
-              : "Could not connect. Check the code, or your network may block direct connections (try another network)."
+            "Could not connect. Check the room code, or your network may be blocking direct connections (try another network)."
           )
         ),
       15000
