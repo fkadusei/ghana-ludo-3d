@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ghana Ludo 3D</title>
+    <link rel="stylesheet" href="src/styles.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <!-- Full-bleed 3D canvas -->
+    <div id="stage" class="stage"></div>
+
+    <!-- HUD -->
+    <header class="topbar">
+      <div class="brand">
+        <span class="kente" aria-hidden="true"></span>
+        <h1>Ghana Ludo <span class="badge">3D</span></h1>
+      </div>
+      <div class="controls">
+        <button id="start">Choose Players</button>
+        <button class="roll-btn" id="roll" disabled>Roll Dice</button>
+        <button class="ghost" id="view" title="Reset camera">Reset View</button>
+        <button class="ghost" id="mute" title="Toggle sound" aria-pressed="false">Sound On</button>
+        <button class="ghost" id="rules">Rules</button>
+      </div>
+    </header>
+
+    <aside class="sidebar">
+      <section class="turn-panel">
+        <div class="turn-card current" id="currentTurn">
+          <span class="label">Your Turn</span>
+          <span class="name" id="currentName">Not set</span>
+        </div>
+        <div class="turn-card next" id="nextTurn">
+          <span class="label">Next</span>
+          <span class="name" id="nextName">—</span>
+        </div>
+        <div class="turn-card last" id="lastTurn">
+          <span class="label">You Rolled</span>
+          <span class="name" id="lastName">—</span>
+        </div>
+      </section>
+      <section class="standings-card" aria-label="Standings">
+        <h2>Standings</h2>
+        <table class="standings"><tbody id="standingsBody"></tbody></table>
+      </section>
+      <button class="ghost reset-btn" id="reset" disabled>Reset Game</button>
+    </aside>
+
+    <div class="status" id="status" role="status" aria-live="polite"></div>
+
+    <!-- Direction chooser (forward vs. backward capture) -->
+    <section class="direction" id="direction" aria-hidden="true">
+      <div class="direction-card">
+        <span class="label">Choose Direction</span>
+        <span class="name" id="directionText">Pick how to move this token.</span>
+        <div class="direction-actions">
+          <button id="directionForward">Move Forward</button>
+          <button class="ghost" id="directionBackward">Move Backward</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Game-over screen -->
+    <section class="modal winner" id="winnerModal" aria-hidden="true">
+      <div class="modal-card winner-card" role="dialog" aria-modal="true" aria-labelledby="winnerTitle">
+        <div class="trophy" aria-hidden="true">&#127942;</div>
+        <h2 id="winnerTitle">Blue wins!</h2>
+        <ol class="podium" id="podium"></ol>
+        <div class="players-actions">
+          <button class="ghost" id="winnerClose">View Board</button>
+          <button id="winnerNew">New Game</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="loading" id="loading">Loading 3D board…</div>
+
+    <!-- Player color setup modal -->
+    <section class="modal" id="playersModal" aria-hidden="true">
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="playersTitle">
+        <header class="modal-header">
+          <h2 id="playersTitle">Choose Players</h2>
+          <button class="ghost" id="playersClose" aria-label="Close player selection">Close</button>
+        </header>
+        <div class="modal-body">
+          <p>Select 2-4 colors to play. Only selected colors will have pawns on the board.</p>
+          <div class="players-grid" role="group" aria-label="Player colors">
+            <label class="player-toggle blue"><input type="checkbox" id="playBlue" checked /> Blue</label>
+            <label class="player-toggle red"><input type="checkbox" id="playRed" checked /> Red</label>
+            <label class="player-toggle yellow"><input type="checkbox" id="playYellow" checked /> Yellow</label>
+            <label class="player-toggle green"><input type="checkbox" id="playGreen" checked /> Green</label>
+          </div>
+          <div class="players-actions"><button id="playersSave">Save Selection</button></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Rules modal -->
+    <section class="modal" id="rulesModal" aria-hidden="true">
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+        <header class="modal-header">
+          <h2 id="rulesTitle">Ludo Rules Guide</h2>
+          <button class="ghost" id="rulesClose" aria-label="Close rules">Close</button>
+        </header>
+        <div class="modal-body">
+          <section><h3>Goal</h3><p>Move all four of your pawns from base to the center home by rolling the dice and moving clockwise.</p></section>
+          <section><h3>Starting</h3><ul>
+            <li>Click “Decide Starter” to pick the first player.</li>
+            <li>You must roll a 6 to bring a pawn out of base.</li>
+            <li>Rolling a 6 grants an extra turn.</li>
+          </ul></section>
+          <section><h3>Movement</h3><ul>
+            <li>Move clockwise along the outer track by the rolled number.</li>
+            <li>After completing a full loop, enter your colored home lane.</li>
+            <li>Pawns must count exact steps to reach home.</li>
+          </ul></section>
+          <section><h3>Captures &amp; Safe Squares</h3><ul>
+            <li>Landing on a lone opponent captures it and sends it back to base.</li>
+            <li>Safe squares are the colored starts and the star squares eight steps after them.</li>
+            <li>Two pawns of one color on the same square form a blockade that others cannot pass.</li>
+          </ul></section>
+          <section><h3>Backward Capture</h3><ul>
+            <li>Backward moves are allowed only when they capture a single opponent.</li>
+            <li>If both forward and backward moves are legal, you choose the direction.</li>
+          </ul></section>
+          <section><h3>Controls</h3><ul>
+            <li>Drag to orbit, scroll or pinch to zoom.</li>
+            <li>Click the dice, the Roll button or press Space to roll.</li>
+            <li>Click a glowing pawn to move it.</li>
+          </ul></section>
+          <section><h3>Winning</h3><p>The first player to move all four pawns into the center wins.</p></section>
+        </div>
+      </div>
+    </section>
+
+    <script type="module" src="src/main.js"></script>
+  </body>
+</html>
