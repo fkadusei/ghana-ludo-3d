@@ -15,6 +15,11 @@
 
 html, body {
   margin: 0;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
   height: 100%;
   overflow: hidden;
   font-family: "Avenir Next", "Gill Sans", "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
@@ -63,6 +68,7 @@ html, body {
 .controls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 
 button {
+  touch-action: manipulation;
   font: inherit;
   font-weight: 700;
   color: #1b120c;
@@ -316,3 +322,29 @@ body::after {
 .podium li.green { border-left-color: var(--green); }
 .winner-card .players-actions { gap: 10px; justify-content: center; }
 .modal.winner { background: rgba(10, 6, 4, 0.5); }
+
+/* ---------- touch / phone ---------- */
+.topbar { padding-top: max(10px, env(safe-area-inset-top)); padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+@media (pointer: coarse) {
+  button { min-height: 44px; }
+}
+@media (max-width: 900px) {
+  .sidebar { bottom: calc(58px + env(safe-area-inset-bottom)); }
+  .status { bottom: max(10px, env(safe-area-inset-bottom)); }
+  /* big thumb-reachable roll button */
+  .roll-btn {
+    position: fixed;
+    right: max(14px, env(safe-area-inset-right));
+    bottom: calc(150px + env(safe-area-inset-bottom));
+    width: 84px;
+    height: 84px;
+    padding: 0;
+    border-radius: 50%;
+    font-size: 0.9rem;
+    line-height: 1.1;
+    z-index: 6;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.5), inset 0 2px 0 rgba(255, 255, 255, 0.35);
+  }
+  .roll-btn:not(:disabled) { animation: fab 1.6s ease-in-out infinite; }
+  @keyframes fab { 50% { transform: scale(1.07); } }
+}

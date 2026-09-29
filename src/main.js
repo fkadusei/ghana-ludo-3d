@@ -81,6 +81,15 @@ const scene = createScene(el.stage, game, {
 // HUD helpers
 // ---------------------------------------------------------------------------
 
+/** Haptic feedback on phones that support it. */
+const buzz = (pattern) => {
+  try {
+    if (navigator.vibrate) navigator.vibrate(pattern);
+  } catch (err) {
+    // ignore
+  }
+};
+
 const setStatus = (message) => {
   el.status.textContent = message;
 };
@@ -309,7 +318,9 @@ async function rollDice() {
   ui.animating = true;
   refreshControls();
   audio.playDiceRoll();
+  buzz(25);
   await scene.rollDice(value);
+  buzz(value === 6 ? [40, 40, 60] : 30);
   if (value === 6) audio.playChime();
 
   ui.lastRoll = { player, value };
@@ -333,7 +344,7 @@ async function rollDice() {
   ui.pendingPlayer = player;
   ui.animating = false;
   scene.setSelectable(movable);
-  setStatus(`${player.name} rolled ${value}. Click a glowing pawn to move it.`);
+  setStatus(`${player.name} rolled ${value}. Tap a glowing pawn to move it.`);
   refreshControls();
 }
 
@@ -389,12 +400,14 @@ async function executeMove(token, roll, direction) {
   const victim = game.resolveCapture(token);
   if (victim) {
     audio.playCaptureCrash();
+    buzz([70, 40, 110]);
     scene.captureBurst(victim);
     scene.layout();
     flight = scene.flyToBase(victim);
   }
   if (token.finished) {
     audio.playHomeCheer();
+    buzz([40, 30, 40, 30, 90]);
     scene.celebrate(token);
   }
   game.updateStandings();

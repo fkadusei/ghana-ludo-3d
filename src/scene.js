@@ -331,8 +331,10 @@ export function createScene(container, game, { onTokenClick, onDiceClick }) {
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.enablePan = false;
+  controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_ROTATE };
+  controls.rotateSpeed = 0.7;
   controls.minDistance = 9;
-  controls.maxDistance = 38;
+  controls.maxDistance = 90;
   controls.minPolarAngle = 0.15;
   controls.maxPolarAngle = 1.38;
   controls.target.set(0, 0, 2);
@@ -355,7 +357,7 @@ export function createScene(container, game, { onTokenClick, onDiceClick }) {
   const rim = new THREE.DirectionalLight(0xffd6a0, 0.7);
   rim.position.set(0, 5, -14);
   scene.add(rim);
-  scene.fog = new THREE.Fog(0x1a110c, 40, 90);
+  scene.fog = new THREE.Fog(0x1a110c, 130, 300);
 
   // Table (wood)
   const tableTex = makeWoodTexture(renderer, { base: "#3b281c", repeat: 7 });
@@ -483,6 +485,8 @@ export function createScene(container, game, { onTokenClick, onDiceClick }) {
   const headGeo = new THREE.SphereGeometry(0.21, 32, 24);
   const ringGeo = new THREE.RingGeometry(0.44, 0.56, 40);
   const PAWN_SCALE = 0.9;
+  const hitGeo = new THREE.CylinderGeometry(0.62, 0.62, 1.3, 12);
+  const hitMat = new THREE.MeshBasicMaterial({ visible: false });
   const blobTex = makeBlobTexture();
   const blobGeo = new THREE.PlaneGeometry(1.5, 1.5);
 
@@ -526,7 +530,9 @@ export function createScene(container, game, { onTokenClick, onDiceClick }) {
       );
       blob.rotation.x = -Math.PI / 2;
       blob.position.y = 0.015;
-      root.add(blob, body, ring);
+      const hit = new THREE.Mesh(hitGeo, hitMat);
+      hit.position.y = 0.55;
+      root.add(blob, body, ring, hit);
       root.userData.token = token;
       scene.add(root);
       const entry = { root, body, ring, blob, mat, target: new THREE.Vector3(), busy: 0, scale: 1, scaleTarget: 1, squash: 0 };
@@ -783,6 +789,22 @@ export function createScene(container, game, { onTokenClick, onDiceClick }) {
       while (o && !o.userData.token) o = o.parent;
       if (o) return { token: o.userData.token };
     }
+    if (event.pointerType === "touch" && selectable.size) {
+      // Fingers are imprecise: snap to the nearest movable pawn within ~1.1 cells of the touch point.
+      const ground = new THREE.Vector3();
+      if (raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), ground)) {
+        let best = null;
+        let bestD = 1.1;
+        selectable.forEach((token) => {
+          const d = meshes.get(token).root.position.distanceTo(ground);
+          if (d < bestD) {
+            bestD = d;
+            best = token;
+          }
+        });
+        if (best) return { token: best };
+      }
+    }
     return {};
   }
 
@@ -800,6 +822,7 @@ export function createScene(container, game, { onTokenClick, onDiceClick }) {
   });
 
   let downAt = null;
+  let lastTap = 0;
   renderer.domElement.addEventListener("pointerdown", (event) => {
     downAt = { x: event.clientX, y: event.clientY };
   });
@@ -811,14 +834,20 @@ export function createScene(container, game, { onTokenClick, onDiceClick }) {
     const hit = pick(event);
     if (hit.token && selectable.has(hit.token)) onTokenClick(hit.token);
     else if (hit.dice && diceEnabled) onDiceClick();
+    else if (!hit.token && !hit.dice) {
+      // double-tap on empty space recentres the camera
+      const now = performance.now();
+      if (now - lastTap < 320) resetView();
+      lastTap = now;
+    }
   });
 
   // ---- camera ---------------------------------------------------------------
 
   function defaultCameraPosition() {
     const aspect = container.clientWidth / Math.max(1, container.clientHeight);
-    const dist = Math.max(19.5, 11.2 / (Math.tan(THREE.MathUtils.degToRad(20)) * aspect));
-    const polar = 0.78;
+    const dist = Math.max(19.5, 10.2 / (Math.tan(THREE.MathUtils.degToRad(20)) * aspect));
+    const polar = aspect < 0.8 ? 0.5 : 0.78; // steeper, more top-down view on tall phone screens
     return new THREE.Vector3(0, Math.cos(polar) * dist, 2 + Math.sin(polar) * dist);
   }
 
@@ -831,8 +860,16 @@ export function createScene(container, game, { onTokenClick, onDiceClick }) {
       const e = ease(k);
       camera.position.lerpVectors(from, to, e);
       controls.target.lerpVectors(fromT, toT, e);
+    }).then(() => {
+      userMoved = false;
     });
   }
+
+  let userMoved = false;
+  let introRunning = false;
+  controls.addEventListener("start", () => {
+    userMoved = true;
+  });
 
   function resize() {
     const w = Math.max(1, container.clientWidth);
@@ -840,6 +877,8 @@ export function createScene(container, game, { onTokenClick, onDiceClick }) {
     renderer.setSize(w, h);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
+    // keep the whole board framed after rotation / window resize unless the player took the camera
+    if (!userMoved && !introRunning) camera.position.copy(defaultCameraPosition());
   }
   new ResizeObserver(resize).observe(container);
   resize();
@@ -848,14 +887,15 @@ export function createScene(container, game, { onTokenClick, onDiceClick }) {
 
   /** Cinematic entrance: swoop down from a high, slightly rotated viewpoint. */
   function intro() {
-    const end = defaultCameraPosition();
-    const start = new THREE.Vector3(end.x - 14, end.y + 16, end.z + 8);
-    camera.position.copy(start);
+    introRunning = true;
+    const offset = new THREE.Vector3(-14, 16, 8);
     controls.enabled = false;
     return tween(2.4, (k) => {
       const e = 1 - Math.pow(1 - k, 3);
-      camera.position.lerpVectors(start, end, e);
+      const end = defaultCameraPosition(); // re-read each frame so a resize mid-swoop still lands framed
+      camera.position.copy(end).addScaledVector(offset, 1 - e);
     }).then(() => {
+      introRunning = false;
       controls.enabled = true;
     });
   }
@@ -864,11 +904,13 @@ export function createScene(container, game, { onTokenClick, onDiceClick }) {
 
   const clock = new THREE.Clock();
   renderer.setAnimationLoop(() => {
-    const dt = Math.min(clock.getDelta(), 0.05);
+    const rawDt = clock.getDelta();
+    const dt = Math.min(rawDt, 0.05);
+    const tdt = Math.min(rawDt, 0.25); // tweens follow real time so slow frames don't stretch animations
     const time = clock.elapsedTime;
 
     tweens.forEach((tw) => {
-      tw.t += dt;
+      tw.t += tdt;
       const k = Math.min(1, tw.t / tw.duration);
       tw.onUpdate(k);
       if (k >= 1) {

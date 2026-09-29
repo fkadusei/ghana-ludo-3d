@@ -23,5 +23,5 @@ python3 -m http.server 8765
 
 ## Controls
 
-Drag to orbit, scroll/pinch to zoom, **Reset View** to recentre. Click the dice, the Roll button or press Space to roll;
+Drag to orbit, scroll/pinch to zoom, **Reset View** (or double-tap empty space on touch) to recentre. On phones: one finger orbits, two fingers pinch/twist, taps snap to the nearest movable pawn, the round Roll button sits under your thumb, and rolls/captures give haptic feedback. Click the dice, the Roll button or press Space to roll;
 click a glowing pawn to move it. Game state is saved to `localStorage` after each move.
