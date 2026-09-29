@@ -3,6 +3,8 @@
 A 3D rebuild of [ghana-ludo](https://github.com/fkadusei/ghana-ludo) using three.js. Same 2–4 player rules, now on a
 tabletop board with a kente-style border, lathe-turned pawns, a tumbling physical dice, shadows and capture/finish effects.
 
+**Play it live: https://fkadusei.github.io/ghana-ludo-3d/**
+
 ## Run
 
 ES modules need an HTTP origin (not `file://`), and three.js loads from the jsDelivr CDN, so you need internet access:
