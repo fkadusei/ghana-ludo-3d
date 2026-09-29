@@ -24,9 +24,11 @@
       <div class="brand">
         <span class="kente" aria-hidden="true"></span>
         <h1>Ghana Ludo <span class="badge">3D</span></h1>
+        <span class="room-badge" id="roomBadge" hidden></span>
       </div>
       <div class="controls">
         <button id="start">Choose Players</button>
+        <button class="ghost" id="online">Play Online</button>
         <button class="roll-btn" id="roll" disabled>Roll Dice</button>
         <button class="ghost" id="view" title="Reset camera">Reset View</button>
         <button class="ghost" id="mute" title="Toggle sound" aria-pressed="false">Sound On</button>
@@ -66,6 +68,48 @@
         <div class="direction-actions">
           <button id="directionForward">Move Forward</button>
           <button class="ghost" id="directionBackward">Move Backward</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Online multiplayer: menu + lobby -->
+    <section class="modal" id="onlineModal" aria-hidden="true">
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="onlineTitle">
+        <header class="modal-header">
+          <h2 id="onlineTitle">Play Online</h2>
+          <button class="ghost" id="onlineClose" aria-label="Close online menu">Close</button>
+        </header>
+        <div class="modal-body">
+          <!-- step 1: name + create / join -->
+          <div id="onlineMenu">
+            <label class="field">
+              <span>Your name</span>
+              <input id="onlineName" maxlength="14" placeholder="e.g. Kofi" autocomplete="nickname" />
+            </label>
+            <div class="online-actions">
+              <button id="onlineCreate">Create Room</button>
+            </div>
+            <div class="or"><span>or join a friend</span></div>
+            <div class="join-row">
+              <input id="onlineCode" maxlength="5" placeholder="ROOM CODE" autocapitalize="characters" autocomplete="off" spellcheck="false" />
+              <button id="onlineJoin">Join</button>
+            </div>
+          </div>
+          <!-- step 2: lobby -->
+          <div id="onlineLobby" hidden>
+            <div class="room-code-box">
+              <span class="label">Room code</span>
+              <span class="room-code" id="roomCode">-----</span>
+              <button class="ghost" id="copyLink">Copy invite link</button>
+            </div>
+            <ul class="seats" id="seatList"></ul>
+            <p class="hint" id="lobbyHint"></p>
+            <div class="players-actions">
+              <button class="ghost" id="leaveRoom">Leave</button>
+              <button id="startOnline">Start Game</button>
+            </div>
+          </div>
+          <p class="online-error" id="onlineError" role="alert"></p>
         </div>
       </div>
     </section>
@@ -137,6 +181,12 @@
             <li>Drag to orbit; scroll or pinch to zoom. On touch: one finger orbits, two fingers pinch/twist, double-tap empty space to reset the view.</li>
             <li>Click the dice, the Roll button or press Space to roll.</li>
             <li>Click or tap a glowing pawn to move it (taps snap to the nearest movable pawn).</li>
+          </ul></section>
+          <section><h3>Online play</h3><ul>
+            <li>Tap <b>Play Online</b>, then <b>Create Room</b> and share the 5-letter code or the invite link.</li>
+            <li>The host picks who plays: friends take open seats, and any seat can be set to a Computer player.</li>
+            <li>If someone disconnects, the computer covers for them until they rejoin with the same code.</li>
+            <li>Connections are peer-to-peer; if a strict network blocks them, try another network.</li>
           </ul></section>
           <section><h3>Winning</h3><p>The first player to move all four pawns into the center wins.</p></section>
         </div>

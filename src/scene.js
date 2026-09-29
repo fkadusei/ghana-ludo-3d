@@ -420,7 +420,9 @@ export function createScene(container, game, { onTokenClick, onDiceClick }) {
   trayRim.position.y = 0.05;
   tray.add(felt, trayRim);
   tray.position.set(DICE_HOME.x, -0.62 + 0.05, DICE_HOME.z);
-  scene.add(tray);
+  const diceRig = new THREE.Group(); // rotates with the camera so the tray stays in front of the viewer
+  scene.add(diceRig);
+  diceRig.add(tray);
 
   // Turn glow over each yard
   const glows = {};
@@ -454,14 +456,14 @@ export function createScene(container, game, { onTokenClick, onDiceClick }) {
   );
   dice.castShadow = true;
   dice.position.copy(DICE_HOME);
-  scene.add(dice);
+  diceRig.add(dice);
   const diceRing = new THREE.Mesh(
     new THREE.RingGeometry(0.95, 1.2, 48),
     new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })
   );
   diceRing.rotation.x = -Math.PI / 2;
   diceRing.position.set(DICE_HOME.x, -0.46, DICE_HOME.z);
-  scene.add(diceRing);
+  diceRig.add(diceRing);
   let diceEnabled = false;
   let dicePlayerColor = "blue";
   let diceRolling = false;
@@ -844,18 +846,48 @@ export function createScene(container, game, { onTokenClick, onDiceClick }) {
 
   // ---- camera ---------------------------------------------------------------
 
+  // Camera azimuth per seat: puts each player's own yard at the near-left of the screen.
+  const SEAT_AZIMUTH = { yellow: 0, blue: -Math.PI / 2, red: Math.PI, green: Math.PI / 2 };
+  let viewAzimuth = 0;
+
+  function viewTarget() {
+    return new THREE.Vector3(0, 0, 2).applyAxisAngle(UP, viewAzimuth);
+  }
+
   function defaultCameraPosition() {
     const aspect = container.clientWidth / Math.max(1, container.clientHeight);
     const dist = Math.max(19.5, 10.2 / (Math.tan(THREE.MathUtils.degToRad(20)) * aspect));
     const polar = aspect < 0.8 ? 0.5 : 0.78; // steeper, more top-down view on tall phone screens
-    return new THREE.Vector3(0, Math.cos(polar) * dist, 2 + Math.sin(polar) * dist);
+    const offset = new THREE.Vector3(0, Math.cos(polar) * dist, Math.sin(polar) * dist).applyAxisAngle(UP, viewAzimuth);
+    return viewTarget().add(offset);
+  }
+
+  /** Orient the view (and dice tray) so the given seat sits nearest the viewer. */
+  function setViewSeat(color) {
+    const from = viewAzimuth;
+    let to = SEAT_AZIMUTH[color] ?? 0;
+    // take the short way round
+    while (to - from > Math.PI) to -= Math.PI * 2;
+    while (to - from < -Math.PI) to += Math.PI * 2;
+    viewAzimuth = to;
+    userMoved = false;
+    const camFrom = camera.position.clone();
+    const tgtFrom = controls.target.clone();
+    const camTo = defaultCameraPosition();
+    const tgtTo = viewTarget();
+    return tween(0.9, (k) => {
+      const e = ease(k);
+      diceRig.rotation.y = THREE.MathUtils.lerp(from, to, e);
+      camera.position.lerpVectors(camFrom, camTo, e);
+      controls.target.lerpVectors(tgtFrom, tgtTo, e);
+    });
   }
 
   function resetView() {
     const from = camera.position.clone();
     const fromT = controls.target.clone();
     const to = defaultCameraPosition();
-    const toT = new THREE.Vector3(0, 0, 2);
+    const toT = viewTarget();
     return tween(0.7, (k) => {
       const e = ease(k);
       camera.position.lerpVectors(from, to, e);
@@ -998,7 +1030,7 @@ export function createScene(container, game, { onTokenClick, onDiceClick }) {
 
   return {
     layout, snap, hopStep, flyToBase, captureBurst, celebrate,
-    rollDice, setDiceFace, setSelectable, setActivePlayer, setDiceEnabled, resetView, intro,
+    rollDice, setDiceFace, setSelectable, setActivePlayer, setDiceEnabled, resetView, setViewSeat, intro,
     celebrateAll() {
       [[-4, 0], [4, 0], [0, -4], [0, 4], [0, 0]].forEach(([x, z], i) =>
         setTimeout(() => burst(new THREE.Vector3(x, 0, z), [0xf2c230, 0xc8281e, 0x1f7a3d, 0xffffff, 0x2b5fd0], { count: 120, speed: 7, life: 2, size: 0.2 }), i * 260));
