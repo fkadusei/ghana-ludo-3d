@@ -29,6 +29,11 @@ const el = {
   soloColor: $("soloColor"),
   soloCount: $("soloCount"),
   soloLevel: $("soloLevel"),
+  react: $("react"),
+  reactTray: $("reactTray"),
+  reactEmojis: $("reactEmojis"),
+  reactPhrases: $("reactPhrases"),
+  bubbles: $("bubbles"),
   roomBadge: $("roomBadge"),
   roll: $("roll"),
   view: $("view"),
@@ -88,6 +93,12 @@ try {
 }
 
 const STORAGE_KEY = "ghana_ludo_3d_state_v1";
+const SOLO_KEY = "ghana_ludo_3d_solo_v1";
+
+// Reactions are sent as indexes into these fixed lists, so peers can never inject arbitrary text.
+const REACTIONS = ["👍", "😂", "😮", "😡", "👏", "🎉", "😭", "🔥"];
+const PHRASES = ["Good game!", "Nice move!", "Oops!", "Your turn!", "Hurry up!", "Well played!"];
+const REACT_COOLDOWN_MS = 1200;
 const game = new Game();
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -288,7 +299,11 @@ function setModal(modal, open) {
 // ---------------------------------------------------------------------------
 
 function persist() {
-  if (online.active) return;
+  if (online.active && !online.solo) return;
+  if (online.solo) {
+    persistSolo();
+    return;
+  }
   try {
     localStorage.setItem(
       STORAGE_KEY,
@@ -311,6 +326,67 @@ function clearPersisted() {
     localStorage.removeItem(STORAGE_KEY);
   } catch (err) {
     // ignore
+  }
+}
+
+function clearSoloSaved() {
+  try {
+    localStorage.removeItem(SOLO_KEY);
+  } catch (err) {
+    // ignore
+  }
+}
+
+/** Saves a vs-computer game (including a rolled-but-unmoved pawn choice) so a reload resumes it. */
+function persistSolo() {
+  if (allDone()) {
+    clearSoloSaved();
+    return;
+  }
+  if (!ui.gameStarted) return;
+  try {
+    localStorage.setItem(
+      SOLO_KEY,
+      JSON.stringify({
+        game: game.serialize(),
+        solo: {
+          mySeat: online.mySeat,
+          level: online.botLevel,
+          kinds: Object.fromEntries(SEATS.map((c) => [c, online.seats[c].kind])),
+        },
+        ui: {
+          actionSeq: ui.actionSeq,
+          lastRoll: ui.lastRoll ? { color: ui.lastRoll.player.color, value: ui.lastRoll.value } : null,
+          pending: ui.awaitingMove && ui.pendingPlayer ? { color: ui.pendingPlayer.color, roll: ui.pendingRoll } : null,
+        },
+      })
+    );
+  } catch (err) {
+    // Storage may be unavailable; the game still works.
+  }
+}
+
+function tryRestoreSolo() {
+  try {
+    const raw = localStorage.getItem(SOLO_KEY);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    if (!data?.solo?.mySeat || !SEATS.includes(data.solo.mySeat) || !game.restore(data.game)) return false;
+    enterSoloSession(data.solo.mySeat, data.solo.kinds, data.solo.level);
+    ui.setupComplete = true;
+    ui.gameStarted = true;
+    ui.actionSeq = data.ui.actionSeq || 0;
+    const last = data.ui.lastRoll && game.players.find((p) => p.color === data.ui.lastRoll.color);
+    ui.lastRoll = last ? { player: last, value: data.ui.lastRoll.value } : null;
+    const pending = data.ui.pending && game.players.find((p) => p.color === data.ui.pending.color);
+    if (pending && game.movableTokens(pending, data.ui.pending.roll).length) {
+      ui.awaitingMove = true;
+      ui.pendingRoll = data.ui.pending.roll;
+      ui.pendingPlayer = pending;
+    }
+    return true;
+  } catch (err) {
+    return false;
   }
 }
 
@@ -469,6 +545,7 @@ async function doRoll(value) {
   refreshSelectable();
   setStatus(mine ? `You rolled ${value}. Tap a glowing pawn to move it.` : `${seatLabel(player)} rolled ${value}. Waiting for them to move…`);
   refreshControls();
+  persist(); // solo games remember a rolled-but-unmoved choice so a reload can't reroll it
 }
 
 function handleTokenClick(token) {
@@ -734,6 +811,10 @@ function hostOnData(conn, msg) {
     online.intents.push({ conn, msg, at: Date.now() });
     drainIntents();
   }
+  if (msg.t === "react") {
+    const seat = seatOfConn(conn);
+    if (seat) relayReaction(seat, msg.k, msg.i);
+  }
 }
 
 function hostOnClose(conn) {
@@ -791,6 +872,45 @@ function drainIntents() {
   });
 }
 
+/**
+ * Chance (0..1) that `player`'s pawn standing on track index `idx` gets captured on an opponent's
+ * next roll: counts the distinct roll values that let some opponent land on it, going forward,
+ * backward (capture-only) or straight out of base onto their start square.
+ */
+function riskAt(player, idx, pawn) {
+  if (idx == null || game.safeIndices.has(idx)) return 0;
+  // Two of our pawns on one square form a blockade and cannot be captured.
+  if (game.tokensAtIndex(idx).some((t) => t.player === player && t !== pawn)) return 0;
+  const hits = new Set();
+  game.enabledPlayers().forEach((p) => {
+    if (p === player) return;
+    p.tokens.forEach((t) => {
+      if (t.finished) return;
+      if (t.steps === -1) {
+        if (p.startIndex === idx) hits.add(6);
+        return;
+      }
+      const j = game.landingIndex(t);
+      if (j == null) return; // in a home lane
+      const ahead = (idx - j + 52) % 52;
+      const behind = (j - idx + 52) % 52;
+      if (ahead >= 1 && ahead <= 6) hits.add(ahead);
+      if (behind >= 1 && behind <= 6) hits.add(behind);
+    });
+  });
+  return hits.size / 6;
+}
+
+/** Hard-level tweak: avoid ending next to opponents, and rescue pawns that are currently exposed. */
+function hardAdjust(player, token, dir, roll) {
+  let target = dir === "backward" ? token.steps - roll : token.steps === -1 ? 0 : token.steps + roll;
+  if (target < 0 && target !== -1) target += 52;
+  const weight = 1 + Math.max(0, target) / 58; // pawns further along are worth protecting more
+  const after = riskAt(player, game.indexForSteps(player, target), token);
+  const before = token.steps >= 0 ? riskAt(player, game.landingIndex(token), token) : 0;
+  return -after * 70 * weight + before * 45 * weight;
+}
+
 /** Computer players: pick a sensible legal move (captures > finishing > leaving base > progress). */
 function botChoose(player, roll) {
   let best = null;
@@ -801,7 +921,7 @@ function botChoose(player, roll) {
     if (o.forward) dirs.push("forward");
     if (o.backward) dirs.push("backward");
     dirs.forEach((dir) => {
-      let score = Math.random() * 3;
+      let score = Math.random() * (online.botLevel === "hard" ? 0.5 : 3);
       if (dir === "backward") {
         score += 100;
       } else {
@@ -814,6 +934,7 @@ function botChoose(player, roll) {
         else if (target > player.entryStep) score += 35;
         if (token.steps > 0) score += token.steps * 0.15;
       }
+      if (online.botLevel === "hard") score += hardAdjust(player, token, dir, roll);
       all.push({ token, dir, score });
       if (!best || score > best.score) best = { token, dir, score };
     });
@@ -963,6 +1084,8 @@ function renderLobby() {
 function updateBadge() {
   el.online.hidden = online.solo;
   el.solo.hidden = online.active;
+  el.react.hidden = !(online.active && !online.solo);
+  if (el.react.hidden) setReactTray(false);
   if (!online.active) {
     el.roomBadge.hidden = true;
     el.online.textContent = "Play Online";
@@ -1141,6 +1264,9 @@ function clientOnData(msg) {
       ui.moveSent = false;
       refreshSelectable();
       break;
+    case "react":
+      showReaction(msg.seat, msg.k, msg.i);
+      break;
     default:
       break;
   }
@@ -1203,36 +1329,113 @@ function handleStart(enabled, starter) {
   runStarter(starter);
 }
 
+/** Puts the controller into vs-computer mode: online host logic, run locally with a dummy network. */
+function enterSoloSession(color, kinds, level) {
+  online.active = true;
+  online.role = "host";
+  online.solo = true;
+  online.botLevel = ["easy", "normal", "hard"].includes(level) ? level : "normal";
+  online.link = { broadcast() {}, sendTo() {}, close() {} };
+  online.code = null;
+  online.ended = false;
+  online.phase = "playing";
+  online.intents = [];
+  online.inbox = [];
+  online.latest = null;
+  online.mySeat = color;
+  online.seats = Object.fromEntries(SEATS.map((c) => [c, { kind: kinds[c] === "bot" ? "bot" : "closed", name: "" }]));
+  online.seats[color] = { kind: "host", name: "" };
+  el.start.classList.add("hidden");
+  el.reset.disabled = false;
+  el.reset.textContent = "Leave Game";
+  updateBadge();
+}
+
+// ---------------------------------------------------------------------------
+// Online: reactions (emoji + quick chat)
+// ---------------------------------------------------------------------------
+
+const lastReactAt = {}; // host: seat -> timestamp, for rate limiting
+let myLastReact = 0;
+
+function buildReactTray() {
+  REACTIONS.forEach((emoji, i) => {
+    const b = document.createElement("button");
+    b.textContent = emoji;
+    b.setAttribute("aria-label", `React ${emoji}`);
+    b.addEventListener("click", () => sendReaction("e", i));
+    el.reactEmojis.appendChild(b);
+  });
+  PHRASES.forEach((text, i) => {
+    const b = document.createElement("button");
+    b.textContent = text;
+    b.addEventListener("click", () => sendReaction("p", i));
+    el.reactPhrases.appendChild(b);
+  });
+}
+
+function setReactTray(open) {
+  el.reactTray.hidden = !open;
+  el.react.setAttribute("aria-expanded", String(open));
+}
+
+/** Local player picks a reaction; the host relays it (and rate-limits) so everyone sees the same thing. */
+function sendReaction(kind, index) {
+  if (!online.active || online.solo || online.ended) return;
+  const now = Date.now();
+  if (now - myLastReact < REACT_COOLDOWN_MS) return;
+  myLastReact = now;
+  setReactTray(false);
+  if (online.role === "host") relayReaction(online.mySeat, kind, index);
+  else online.link.send({ t: "react", k: kind, i: index });
+}
+
+/** Host: validate against the fixed lists, then show locally and broadcast to everyone. */
+function relayReaction(seat, kind, index) {
+  const list = kind === "e" ? REACTIONS : kind === "p" ? PHRASES : null;
+  if (!list || !Number.isInteger(index) || index < 0 || index >= list.length) return;
+  const now = Date.now();
+  if (now - (lastReactAt[seat] || 0) < REACT_COOLDOWN_MS * 0.6) return;
+  lastReactAt[seat] = now;
+  online.link.broadcast({ t: "react", seat, k: kind, i: index });
+  showReaction(seat, kind, index);
+}
+
+function showReaction(seat, kind, index) {
+  const text = kind === "e" ? REACTIONS[index] : PHRASES[index];
+  if (!text || !SEATS.includes(seat)) return;
+  const pos = scene.yardScreenPos(seat);
+  const bubble = document.createElement("div");
+  bubble.className = `bubble ${seat}${kind === "e" ? " emoji" : ""}`;
+  const seatInfo = online.seats && online.seats[seat];
+  if (kind === "p") {
+    const who = document.createElement("span");
+    who.className = "who";
+    who.textContent = (seatInfo && seatInfo.name) || seat;
+    bubble.appendChild(who);
+  }
+  bubble.appendChild(document.createTextNode(text));
+  // keep it on-screen: clamp the anchor inside the viewport
+  bubble.style.left = `${Math.min(Math.max(pos.x, 70), window.innerWidth - 70)}px`;
+  bubble.style.top = `${Math.min(Math.max(pos.y, 90), window.innerHeight - 40)}px`;
+  el.bubbles.appendChild(bubble);
+  audio.playPop();
+  setTimeout(() => bubble.remove(), 2700);
+}
+
 /** Play vs Computer: the online host machinery, run locally with a dummy network. */
 function startSolo(color, opponents, level) {
   const idx = SEATS.indexOf(color);
   // 1 opponent sits opposite; 2 sit either side; 3 fill the table
   const prefs = [(idx + 2) % 4, (idx + 1) % 4, (idx + 3) % 4].map((i) => SEATS[i]);
   const chosen = prefs.slice(0, opponents);
+  const kinds = Object.fromEntries(SEATS.map((c) => [c, chosen.includes(c) ? "bot" : "closed"]));
 
-  online.active = true;
-  online.role = "host";
-  online.solo = true;
-  online.botLevel = level;
-  online.link = { broadcast() {}, sendTo() {}, close() {} };
-  online.code = null;
-  online.ended = false;
-  online.intents = [];
-  online.inbox = [];
-  online.latest = null;
-  online.mySeat = color;
-  online.seats = Object.fromEntries(SEATS.map((c) => [c, { kind: "closed", name: "" }]));
-  online.seats[color] = { kind: "host", name: "" };
-  chosen.forEach((c) => {
-    online.seats[c] = { kind: "bot", name: "" };
-  });
+  enterSoloSession(color, kinds, level);
   clearPersisted(); // the previous local game is being replaced
-  el.start.classList.add("hidden");
-  el.reset.disabled = false;
-  el.reset.textContent = "Leave Game";
+  clearSoloSaved();
   setModal(el.soloModal, false);
   setModal(el.playersModal, false);
-  updateBadge();
 
   const enabled = SEATS.filter((c) => online.seats[c].kind !== "closed");
   const starter = game.players.find((p) => p.color === enabled[Math.floor(Math.random() * enabled.length)]).idx;
@@ -1240,6 +1443,7 @@ function startSolo(color, opponents, level) {
 }
 
 function leaveRoom() {
+  if (online.solo) clearSoloSaved(); // leaving on purpose ends the saved solo game
   try {
     online.link?.close();
   } catch (err) {
@@ -1305,6 +1509,12 @@ el.winnerNew.addEventListener("click", () => {
 });
 
 el.online.addEventListener("click", openOnlineModal);
+buildReactTray();
+el.react.addEventListener("click", () => setReactTray(el.reactTray.hidden));
+document.addEventListener("pointerdown", (event) => {
+  // tap anywhere outside the tray closes it
+  if (!el.reactTray.hidden && !el.reactTray.contains(event.target) && event.target !== el.react) setReactTray(false);
+});
 
 // Play vs Computer setup dialog (single-choice chip groups)
 const chipValue = (group) => group.querySelector('.chip[aria-pressed="true"]').dataset.value;
@@ -1378,7 +1588,19 @@ window.addEventListener("pageshow", () => audio.resumeAudio());
 
 const roomParam = net.normalizeCode(new URLSearchParams(window.location.search).get("room"));
 
-if (!roomParam && tryRestore()) {
+if (!roomParam && tryRestoreSolo()) {
+  scene.snap();
+  scene.setViewSeat(online.mySeat, { instant: true });
+  if (ui.lastRoll) scene.setDiceFace(ui.lastRoll.value);
+  renderStandings();
+  setTurnUI();
+  refreshSelectable();
+  refreshControls();
+  const resumed = currentPlayer();
+  if (ui.awaitingMove && isMine(resumed)) setStatus(`Welcome back. You rolled ${ui.pendingRoll}. Tap a glowing pawn to move it.`);
+  else if (isMine(resumed)) setStatus("Welcome back. Your turn, roll to continue.");
+  else setStatus(`Welcome back. ${seatLabel(resumed)} is playing.`);
+} else if (!roomParam && tryRestore()) {
   scene.snap();
   if (ui.lastRoll) scene.setDiceFace(ui.lastRoll.value);
   if (ui.gameStarted) {

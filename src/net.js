@@ -3,23 +3,41 @@
  * and every other player connects straight to it. PeerJS's free cloud broker is only used to
  * introduce peers; game traffic then flows peer-to-peer.
  *
- * Limitation: with STUN only (no TURN relay), a few strict networks (some corporate / carrier-grade
- * NATs) cannot connect directly.
+ * Limitation: with STUN only, a few strict networks (some corporate / carrier-grade NATs) cannot
+ * connect directly. Supply relay (TURN) servers in config.js to cover those.
  */
+import { TURN_SERVERS, TURN_CREDENTIALS_URL } from "./config.js";
 
 const PEERJS_URL = "https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js";
 const ID_PREFIX = "ghanaludo-";
 // No 0/O/1/I so codes are easy to read out loud.
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-const PEER_CONFIG = {
-  config: {
-    iceServers: [
-      { urls: "stun:stun.l.google.com:19302" },
-      { urls: "stun:stun1.l.google.com:19302" },
-      { urls: "stun:global.stun.twilio.com:3478" },
-    ],
-  },
-};
+const STUN_SERVERS = [
+  { urls: "stun:stun.l.google.com:19302" },
+  { urls: "stun:stun1.l.google.com:19302" },
+  { urls: "stun:global.stun.twilio.com:3478" },
+];
+
+/** True when a relay is configured, so callers can tailor error messages. */
+export const hasRelay = () => TURN_SERVERS.length > 0 || !!TURN_CREDENTIALS_URL;
+
+/** STUN + any configured relays (fixed, and/or fetched fresh from TURN_CREDENTIALS_URL). */
+async function peerConfig() {
+  const iceServers = [...STUN_SERVERS, ...TURN_SERVERS];
+  if (TURN_CREDENTIALS_URL) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 4000);
+      const res = await fetch(TURN_CREDENTIALS_URL, { signal: controller.signal });
+      clearTimeout(timer);
+      const extra = await res.json();
+      if (Array.isArray(extra)) iceServers.push(...extra);
+    } catch (err) {
+      // No relay this time; direct connections still work on most networks.
+    }
+  }
+  return { config: { iceServers } };
+}
 
 export const normalizeCode = (value) => String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 5);
 
@@ -47,9 +65,10 @@ function loadPeerJS() {
   return loading;
 }
 
-function openPeer(id) {
+async function openPeer(id) {
+  const cfg = await peerConfig();
   return new Promise((resolve, reject) => {
-    const peer = id ? new window.Peer(id, PEER_CONFIG) : new window.Peer(PEER_CONFIG);
+    const peer = id ? new window.Peer(id, cfg) : new window.Peer(cfg);
     const timer = setTimeout(() => {
       peer.destroy();
       reject(new Error("Could not reach the matchmaking service. Try again."));
@@ -120,7 +139,17 @@ export async function joinRoom(code, handlers) {
   const peer = await openPeer(null);
   const conn = peer.connect(ID_PREFIX + normalizeCode(code), { reliable: true });
   await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("Could not connect. Check the room code and try again.")), 15000);
+    const timer = setTimeout(
+      () =>
+        reject(
+          new Error(
+            hasRelay()
+              ? "Could not connect. Check the room code and try again."
+              : "Could not connect. Check the code, or your network may block direct connections (try another network)."
+          )
+        ),
+      15000
+    );
     conn.on("open", () => {
       clearTimeout(timer);
       resolve();

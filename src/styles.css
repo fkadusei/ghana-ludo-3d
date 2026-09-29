@@ -416,3 +416,54 @@ button.busy { opacity: 0.6; pointer-events: none; }
 .chip.red { border-left: 6px solid var(--red); }
 .chip.yellow { border-left: 6px solid var(--yellow); }
 .chip.green { border-left: 6px solid var(--green); }
+
+/* ---------- reactions ---------- */
+.bubbles { position: fixed; inset: 0; pointer-events: none; z-index: 7; overflow: hidden; }
+.bubble {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  padding: 8px 14px;
+  border-radius: 18px;
+  font-weight: 800;
+  white-space: nowrap;
+  color: #1b120c;
+  background: #fff8e6;
+  border: 3px solid var(--gold);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.45);
+  animation: bubble-float 2.6s ease-out forwards;
+}
+.bubble.blue { border-color: var(--blue); }
+.bubble.red { border-color: var(--red); }
+.bubble.yellow { border-color: var(--yellow); }
+.bubble.green { border-color: var(--green); }
+.bubble .who { display: block; font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.6; }
+.bubble.emoji { font-size: 2rem; padding: 4px 14px; }
+@keyframes bubble-float {
+  0% { opacity: 0; transform: translate(-50%, -60%) scale(0.6); }
+  12% { opacity: 1; transform: translate(-50%, -100%) scale(1.08); }
+  22% { transform: translate(-50%, -100%) scale(1); }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -190%) scale(1); }
+}
+.react-tray {
+  position: fixed;
+  top: 64px;
+  right: 16px;
+  width: min(300px, calc(100vw - 32px));
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  background: linear-gradient(160deg, rgba(58, 42, 32, 0.95), rgba(24, 17, 13, 0.95));
+  border: 1px solid var(--panel-line);
+  border-radius: 16px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  z-index: 9;
+}
+.react-emojis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.react-emojis button { font-size: 1.5rem; padding: 6px 0; background: rgba(255, 255, 255, 0.08); color: inherit; box-shadow: none; border: 1px solid var(--panel-line); }
+.react-phrases { display: flex; flex-wrap: wrap; gap: 6px; }
+.react-phrases button { font-size: 0.85rem; padding: 7px 10px; background: rgba(242, 194, 48, 0.16); color: var(--ink); box-shadow: none; border: 1px solid rgba(242, 194, 48, 0.4); }
+.react-tray button:disabled { opacity: 0.4; }
+@media (max-width: 900px) {
+  .react-tray { top: auto; bottom: calc(150px + env(safe-area-inset-bottom)); right: 8px; }
+}

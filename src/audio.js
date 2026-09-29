@@ -371,6 +371,28 @@ export function playDirectionChime() {
 }
 
 
+/** Soft "pop" when a reaction bubble appears. */
+export function playPop() {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(520, now);
+    osc.frequency.exponentialRampToValueAtTime(900, now + 0.09);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.14, now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.16);
+  } catch (err) {
+    // Ignore audio errors for browsers without user gesture support.
+  }
+}
+
 /** Extra-turn chime when a 6 is rolled. */
 export function playChime() {
   try {

@@ -863,7 +863,7 @@ export function createScene(container, game, { onTokenClick, onDiceClick }) {
   }
 
   /** Orient the view (and dice tray) so the given seat sits nearest the viewer. */
-  function setViewSeat(color) {
+  function setViewSeat(color, { instant = false } = {}) {
     const from = viewAzimuth;
     let to = SEAT_AZIMUTH[color] ?? 0;
     // take the short way round
@@ -875,12 +875,29 @@ export function createScene(container, game, { onTokenClick, onDiceClick }) {
     const tgtFrom = controls.target.clone();
     const camTo = defaultCameraPosition();
     const tgtTo = viewTarget();
+    if (instant) {
+      diceRig.rotation.y = to;
+      camera.position.copy(camTo);
+      controls.target.copy(tgtTo);
+      return Promise.resolve();
+    }
     return tween(0.9, (k) => {
       const e = ease(k);
       diceRig.rotation.y = THREE.MathUtils.lerp(from, to, e);
       camera.position.lerpVectors(camFrom, camTo, e);
       controls.target.lerpVectors(tgtFrom, tgtTo, e);
     });
+  }
+
+  /** Screen position (px, relative to the canvas) just above a color's yard. */
+  function yardScreenPos(color) {
+    const [x, z] = YARD[color];
+    const v = new THREE.Vector3(x, 1.4, z).project(camera);
+    return {
+      x: ((v.x + 1) / 2) * container.clientWidth,
+      y: ((1 - v.y) / 2) * container.clientHeight,
+      visible: v.z < 1,
+    };
   }
 
   function resetView() {
@@ -1030,7 +1047,7 @@ export function createScene(container, game, { onTokenClick, onDiceClick }) {
 
   return {
     layout, snap, hopStep, flyToBase, captureBurst, celebrate,
-    rollDice, setDiceFace, setSelectable, setActivePlayer, setDiceEnabled, resetView, setViewSeat, intro,
+    rollDice, setDiceFace, setSelectable, setActivePlayer, setDiceEnabled, resetView, setViewSeat, yardScreenPos, intro,
     celebrateAll() {
       [[-4, 0], [4, 0], [0, -4], [0, 4], [0, 0]].forEach(([x, z], i) =>
         setTimeout(() => burst(new THREE.Vector3(x, 0, z), [0xf2c230, 0xc8281e, 0x1f7a3d, 0xffffff, 0x2b5fd0], { count: 120, speed: 7, life: 2, size: 0.2 }), i * 260));
