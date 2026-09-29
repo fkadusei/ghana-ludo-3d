@@ -1,9 +1,14 @@
 # Ghana Ludo 3D
 
+> **This game now lives on Zone 210.** Play it at **https://zone210.com/games/ludo/**, alongside Oware, Sudoku,
+> a Ghana & Africa quiz and more. Ongoing development happens in
+> [fkadusei/zone210](https://github.com/fkadusei/zone210) (`public/games/ludo/`). This repository is kept for its history
+> and may fall behind.
+
 A 3D rebuild of [ghana-ludo](https://github.com/fkadusei/ghana-ludo) using three.js. Same 2–4 player rules, now on a
 tabletop board with a kente-style border, lathe-turned pawns, a tumbling physical dice, shadows and capture/finish effects.
 
-**Play it live: https://fkadusei.github.io/ghana-ludo-3d/**
+**Play it live: https://zone210.com/games/ludo/**
 
 ## Run
 
