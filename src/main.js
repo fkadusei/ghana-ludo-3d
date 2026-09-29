@@ -461,6 +461,7 @@ el.mute.addEventListener("click", () => {
   const muted = !audio.isMuted();
   audio.setMuted(muted);
   if (muted) audio.stopShuffleSound();
+  if (!muted) audio.unlockAudio();
   el.mute.textContent = muted ? "Sound Off" : "Sound On";
   el.mute.setAttribute("aria-pressed", String(muted));
 });
@@ -496,6 +497,16 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+// Unlock audio on the first real gesture (touch, click or key). Canvas taps arrive as pointer
+// events, which iOS may not count as a gesture, so listen for the classic touch/click events too.
+["pointerdown", "touchstart", "touchend", "click", "keydown"].forEach((type) => {
+  document.addEventListener(type, () => audio.unlockAudio(), { capture: true, passive: true });
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") audio.resumeAudio();
+});
+window.addEventListener("pageshow", () => audio.resumeAudio());
+
 // ---------------------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------------------
@@ -526,4 +537,4 @@ el.loading.classList.add("done");
 scene.intro();
 
 // Handle for automated checks in the browser console.
-window.__ludo = { game, ui, scene, handleTokenClick, rollDice };
+window.__ludo = { game, ui, scene, handleTokenClick, rollDice, audio };

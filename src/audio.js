@@ -5,6 +5,10 @@ let shuffleNoise = null;
 let muted = false;
 export function setMuted(value) {
   muted = !!value;
+  if (muted && silentEl) silentEl.pause();
+}
+export function audioState() {
+  return { ctx: audioCtx ? audioCtx.state : "none", silentPlaying: !!silentEl && !silentEl.paused };
 }
 export function isMuted() {
   return muted;
@@ -15,9 +19,49 @@ export function getAudioContext() {
   const AudioCtx = window.AudioContext || window.webkitAudioContext;
   if (!AudioCtx) return null;
   if (!audioCtx || audioCtx.state === "closed") audioCtx = new AudioCtx();
-  if (audioCtx.state === "suspended") audioCtx.resume();
+  // iOS can also report "interrupted" (e.g. after a call or app switch)
+  if (audioCtx.state !== "running") audioCtx.resume().catch(() => {});
   return audioCtx;
 }
+
+// Silent clip looped through an <audio> element. On iOS this moves the page onto the "playback"
+// audio session so Web Audio is audible even with the ringer/silent switch on.
+const SILENT_WAV = "data:audio/wav;base64,UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YSADAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==";
+let silentEl = null;
+
+/**
+ * Mobile browsers only allow audio after a user gesture. Call this from gesture events:
+ * it creates/resumes the context and plays a silent buffer to fully unlock it.
+ */
+export function unlockAudio() {
+  if (muted) return false;
+  if (audioCtx && audioCtx.state === "running" && silentEl && !silentEl.paused) return true; // already unlocked
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return false;
+    const src = ctx.createBufferSource();
+    src.buffer = ctx.createBuffer(1, 1, 22050);
+    src.connect(ctx.destination);
+    src.start(0);
+    if (!silentEl) {
+      silentEl = new Audio(SILENT_WAV);
+      silentEl.loop = true;
+      silentEl.setAttribute("playsinline", "");
+    }
+    silentEl.play().catch(() => {});
+    return ctx.state === "running";
+  } catch (err) {
+    return false;
+  }
+}
+
+/** Keeps audio alive across tab switches / interruptions. */
+export function resumeAudio() {
+  if (muted || !audioCtx) return;
+  if (audioCtx.state !== "running") audioCtx.resume().catch(() => {});
+  if (silentEl && silentEl.paused) silentEl.play().catch(() => {});
+}
+
 
 /** Short shuffle burst used while starter selection is animating. */
 export function playShuffleBurst() {
